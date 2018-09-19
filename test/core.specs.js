@@ -1,11 +1,11 @@
 const assert = require('assert')
 
 // require the lib
-const icaro = require('../')
+const ikarhu = require('../')
 
-describe('icaro core', () => {
+describe('ikarhu core', () => {
   it('it can listen simple object changes', function(done) {
-    const i = icaro()
+    const i = ikarhu()
 
     i.listen(function(changes) {
       assert.equal(changes.get('foo'), 'bar')
@@ -16,7 +16,7 @@ describe('icaro core', () => {
   })
 
   it('throws error when listener is not a valid function', function() {
-    const i = icaro()
+    const i = ikarhu()
 
     assert.throws(
       () => {
@@ -26,7 +26,7 @@ describe('icaro core', () => {
   })
 
   it('it groups multiple changes together', function(done) {
-    const i = icaro()
+    const i = ikarhu()
 
     i.listen(function(changes) {
       assert.equal(changes.get('foo'), 'bar')
@@ -39,7 +39,7 @@ describe('icaro core', () => {
   })
 
   it('it can listen arrays and sub children', function(done) {
-    const i = icaro()
+    const i = ikarhu()
 
     i.arr = []
     i.arr.listen(function(changes) {
@@ -53,7 +53,7 @@ describe('icaro core', () => {
   })
 
   it('it can listen array changes', function(done) {
-    const arr = icaro(['one', 'two'])
+    const arr = ikarhu(['one', 'two'])
 
     // can loop
     arr.listen(function() {
@@ -68,7 +68,7 @@ describe('icaro core', () => {
   })
 
   it('it can loop arrays', function() {
-    const arr = icaro(['one', 'two'])
+    const arr = ikarhu(['one', 'two'])
     const test = []
     // can loop
     arr.forEach(function(item) {
@@ -87,8 +87,8 @@ describe('icaro core', () => {
   })
 
   it('the toJSON call return properly either an object or an array', function() {
-    const arr = icaro([1, 2])
-    const obj = icaro({ uno: 1, due: 2 })
+    const arr = ikarhu([1, 2])
+    const obj = ikarhu({ uno: 1, due: 2 })
 
     assert.deepEqual(arr.toJSON(), [1, 2])
     assert.deepEqual(obj.toJSON(), { uno: 1, due: 2 })
@@ -96,12 +96,12 @@ describe('icaro core', () => {
 
 
   it('array values should be listenable if objects', function() {
-    const i = icaro([{ value: 'foo' }])
+    const i = ikarhu([{ value: 'foo' }])
     assert.ok(i[0].listen)
   })
 
   it('"Array.reverse" will dispatch changes', function(done) {
-    const i = icaro(['foo', 'bar'])
+    const i = ikarhu(['foo', 'bar'])
     i.listen(function(changes) {
       assert.equal(changes.get('0'), 'bar')
       assert.equal(changes.get('1'), 'foo')
@@ -111,7 +111,7 @@ describe('icaro core', () => {
   })
 
   it('"Array.sort" will dispatch changes', function(done) {
-    const i = icaro(['a', 'c', 'b'])
+    const i = ikarhu(['a', 'c', 'b'])
     i.listen(function(changes) {
       assert.ok(!changes.get('0')) // 'a' was never moved
       assert.equal(changes.get('1'), 'b')

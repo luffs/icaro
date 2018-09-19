@@ -1,12 +1,12 @@
-# icaro
-A smart and efficient javascript object observer, ideal for batching DOM updates (__~1kb__)
+# ikarhu
+A neat javascript object observer, good for batching DOM updates
 
 [![Build Status][travis-image]][travis-url]
 [![NPM version][npm-version-image]][npm-url]
 [![NPM downloads][npm-downloads-image]][npm-url]
 [![MIT License][license-image]][license-url]
 
-<img src='https://raw.githubusercontent.com/GianlucaGuarini/icaro/master/image.jpg' width='100%' />
+<img src='https://raw.githubusercontent.com/luffs/icaro/master/image.jpg' width='100%' />
 
 # Installation
 

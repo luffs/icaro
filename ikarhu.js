@@ -1,14 +1,101 @@
-const listeners = new WeakMap(),
-  snitches = new WeakMap(),
-  dispatch = Symbol(),
-  isIcaro = Symbol(),
-  timer = Symbol(),
-  isArray = Symbol(),
-  changes = Symbol(),
-  rollback = Symbol(),
-  DELETED = '__deleted__';
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+	typeof define === 'function' && define.amd ? define(factory) :
+	(global.ikarhu = factory());
+}(this, (function () { 'use strict';
 
-import './set-immediate'
+// fork of https://github.com/YuzuJS/setImmediate
+((function (global) {
+  if (global.setImmediate) {
+    return
+  }
+
+  const tasksByHandle = {};
+
+  let nextHandle = 1; // Spec says greater than zero
+  let currentlyRunningATask = false;
+  let registerImmediate;
+
+  function setImmediate(callback) {
+    tasksByHandle[nextHandle] = callback;
+    registerImmediate(nextHandle);
+    return nextHandle++
+  }
+
+  function clearImmediate(handle) {
+    delete tasksByHandle[handle];
+  }
+
+  function runIfPresent(handle) {
+    // From the spec: "Wait until any invocations of this algorithm started before this one have completed."
+    // So if we're currently running a task, we'll need to delay this invocation.
+    if (currentlyRunningATask) {
+      // Delay by doing a setTimeout. setImmediate was tried instead, but in Firefox 7 it generated a
+      // "too much recursion" error.
+      setTimeout(runIfPresent, 0, handle);
+    } else {
+      const task = tasksByHandle[handle];
+      if (task) {
+        currentlyRunningATask = true;
+        try {
+          task();
+        } finally {
+          clearImmediate(handle);
+          currentlyRunningATask = false;
+        }
+      }
+    }
+  }
+
+  function installNextTickImplementation() {
+    registerImmediate = handle => {
+      process.nextTick(() => { runIfPresent(handle); });
+    };
+  }
+
+  function installPostMessageImplementation() {
+    // Installs an event handler on `global` for the `message` event: see
+    // * https://developer.mozilla.org/en/DOM/window.postMessage
+    // * http://www.whatwg.org/specs/web-apps/current-work/multipage/comms.html#crossDocumentMessages
+    const messagePrefix = `setImmediate$${Math.random()}$`;
+    const onGlobalMessage = event => {
+      if (event.source === global &&
+                typeof event.data === 'string' &&
+                event.data.indexOf(messagePrefix) === 0) {
+        runIfPresent(+event.data.slice(messagePrefix.length));
+      }
+    };
+
+    global.addEventListener('message', onGlobalMessage, false);
+
+    registerImmediate = handle => {
+      global.postMessage(messagePrefix + handle, '*');
+    };
+  }
+
+  // Don't get fooled by e.g. browserify environments.
+  if ({}.toString.call(global.process) === '[object process]') {
+    // For Node.js before 0.9
+    installNextTickImplementation();
+  } else {
+    // For non-IE10 modern browsers
+    installPostMessageImplementation();
+  }
+
+  global.setImmediate = setImmediate;
+  global.clearImmediate = clearImmediate;
+
+}))(typeof self === 'undefined' ? typeof global === 'undefined' ? window : global : self);
+
+const listeners = new WeakMap();
+const snitches = new WeakMap();
+const dispatch = Symbol();
+const isIcaro = Symbol();
+const timer = Symbol();
+const isArray = Symbol();
+const changes = Symbol();
+const rollback = Symbol();
+const DELETED = '__deleted__';
 
 /**
  * Public api
@@ -21,12 +108,12 @@ const API = {
    * @returns {API}
    */
   listen(fn) {
-    const type = typeof fn
+    const type = typeof fn;
     if(type !== 'function')
       throw `The icaro.listen method accepts as argument "typeof 'function'", "${type}" is not allowed`
 
-    if (!listeners.has(this)) listeners.set(this, [])
-    listeners.get(this).push(fn)
+    if (!listeners.has(this)) listeners.set(this, []);
+    listeners.get(this).push(fn);
 
     return this
   },
@@ -37,13 +124,13 @@ const API = {
    * @returns {API}
    */
   unlisten(fn) {
-    const callbacks = listeners.get(this)
+    const callbacks = listeners.get(this);
     if (!callbacks) return
     if (fn) {
-      const index = callbacks.indexOf(fn)
-      if (~index) callbacks.splice(index, 1)
+      const index = callbacks.indexOf(fn);
+      if (~index) callbacks.splice(index, 1);
     } else {
-      listeners.set(this, [])
+      listeners.set(this, []);
     }
 
     return this
@@ -55,8 +142,8 @@ const API = {
    */
   toJSON() {
     return Object.keys(this).reduce((ret, key) => {
-      const value = this[key]
-      ret[key] = value && value.toJSON ? value.toJSON() : value
+      const value = this[key];
+      ret[key] = value && value.toJSON ? value.toJSON() : value;
       return ret
     }, this[isArray] ? [] : {})
   },
@@ -136,7 +223,7 @@ const API = {
       }
     }
   },
-}
+};
 
 /**
  * Icaro proxy handler
@@ -175,7 +262,7 @@ const IKARHU_HANDLER = {
     target[dispatch](property, DELETED);
     return true;
   }
-}
+};
 
 /**
  * Define a private property
@@ -189,7 +276,7 @@ function define(obj, key, value) {
     enumerable: false,
     configurable: false,
     writable: false
-  })
+  });
 }
 
 /**
@@ -309,9 +396,13 @@ function isObject(val) {
  * @param   {*} obj - anything can be an ikarhu Proxy
  * @returns {Proxy}
  */
-export default function ikarhu(obj) {
+function ikarhu(obj) {
   return new Proxy(
     enhance(obj || {}),
     Object.create(IKARHU_HANDLER)
   )
 }
+
+return ikarhu;
+
+})));
