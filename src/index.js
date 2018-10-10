@@ -254,6 +254,10 @@ function makeSnitch(target, property, parents, orgTarget, orgProp){
         }
         return snitches.get( child[prop] );
       }
+      else if ( typeof child[prop] === 'function' ) {
+        //return a function that calls the original function with the correct context
+        return (...args) => child[prop].apply(child, args);
+      }
       return child[prop];
     },
     set(child, prop, value){
