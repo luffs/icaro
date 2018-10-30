@@ -334,7 +334,7 @@ function enhance(obj) {
  */
 function makeSnitch(target, property, parents, orgTarget, orgProp){
   return new Proxy(target[property], {
-    get(child, prop){
+    get(child, prop, receiver){
       if ( isObject(child[prop]) ) {
         if ( !snitches.has(child[prop]) ) {
           snitches.set( child[prop], makeSnitch(child, prop, [prop].concat(parents), orgTarget, orgProp) );
@@ -343,7 +343,7 @@ function makeSnitch(target, property, parents, orgTarget, orgProp){
       }
       else if ( typeof child[prop] === 'function' ) {
         //return a function that calls the original function with the correct context
-        return (...args) => child[prop].apply(child, args);
+        return (...args) => child[prop].apply(receiver, args);
       }
       return child[prop];
     },
