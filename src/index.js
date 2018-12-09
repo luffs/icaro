@@ -1,12 +1,12 @@
 const listeners = new WeakMap(),
   snitches = new WeakMap(),
   dispatch = Symbol(),
-  isIcaro = Symbol(),
+  isIkarhu = Symbol(),
   timer = Symbol(),
   isArray = Symbol(),
   changes = Symbol(),
-  rollback = Symbol(),
-  DELETED = '__deleted__';
+  DELETED = '__deleted__',
+  NULL = '__null__';
 
 import './set-immediate'
 
@@ -60,80 +60,20 @@ const API = {
       return ret
     }, this[isArray] ? [] : {})
   },
-  patch(changes) {
-    // failedChanges can be used to rollback to the valid values
-    let failedChanges = JSON.parse(JSON.stringify(changes));
-    let errors = [];
-    let oldValues = {};
-    patchObject(this, changes, failedChanges, oldValues);
-    if (Object.keys(failedChanges).length !== 0) {
-        throw {errors: errors, rollback: failedChanges, toString: () => JSON.stringify(errors)};
+  diff(changes) {
+    patch(this, changes, true);
+    changes = convertArrayToObject( changes );
+
+    if (listeners.has(this) && Object.keys(changes).length > 0) {
+      listeners.get(this).forEach( fn => fn(changes) );
     }
+  },
+  patch(changes) {
 
-    function patchObject(target, changes, failedChanges, oldValues) {
-      Object.keys(changes).forEach(key => {
-        // call patchObject recursively if object
-        if (isObject(changes[key]) && isObject(target[key])) {
-          oldValues[key] = {};
-          patchObject(target[key], changes[key], failedChanges[key], oldValues[key]);
-          if (Object.keys(changes[key]).length === 0) {
-            // no change occurred
-            delete changes[key];
-          }
-          if (Object.keys(failedChanges[key]).length === 0) {
-            // all changes succeeded
-            delete failedChanges[key];
-          }
-          if (Object.keys(oldValues[key]).length === 0) {
-            // no old values
-            delete oldValues[key];
-          }
-        }
-        else {
-          // update the values. might throw if target is a proxy
-          try {
-            if (target[key] !== undefined) {
-              oldValues[key] = target[key];
-            }
+    patch(this, changes);
 
-            // if the property is to be deleted
-            if (changes[key] === DELETED) {
-              if (Array.isArray(target)) {
-                target.splice(Number(key), 1);
-              }
-              else {
-                delete target[key];
-              }
-              delete failedChanges[key];
-            }
-            // value is the same, do nothing
-            else if (target[key] === changes[key]) {
-              delete changes[key];
-              delete failedChanges[key];
-            }
-            else {
-              // update the value
-              target[key] = changes[key];
-              delete failedChanges[key];
-            }
-          } catch (e) {
-            // invalid update
-            delete changes[key];
-            delete oldValues[key];
-
-            // if the update failed, return the previous value to the user
-            failedChanges[key] = target && target.hasOwnProperty(key) ? target[key] : DELETED;
-
-            // also return the reason why
-            errors.push(e.toString());
-          }
-        }
-      });
-      if (listeners.has(target) && Object.keys(changes).length > 0) {
-        listeners.get(target).forEach(function (fn) {
-          fn(changes, oldValues);
-        });
-      }
+    if (listeners.has(this) && Object.keys(changes).length > 0) {
+      listeners.get(this).forEach( fn => fn(changes) );
     }
   },
 }
@@ -144,22 +84,21 @@ const API = {
  */
 const IKARHU_HANDLER = {
   set(target, property, value) {
-    // filter the values that didn't change
+		// filter the values that didn't change
     if (target[property] !== value) {
-      //console.log('set', target, property, value);
-      let oldValue = target[property];
+			//console.log('set', target, property, value);
       target[property] = value;
-      //filter symbolic properties that are used internally in ikarhu
+			//filter symbolic properties that are used internally in ikarhu
       if ( typeof property !== 'symbol' ) {
-        target[dispatch](property, value, oldValue);
+        target[dispatch](property, value);
       }
     }
     return true
   },
   get(target, property) {
-    //console.log('get ikarhu', target, property);
+		//console.log('get ikarhu', target, property);
     let targetProp = target[property];
-    if ( isObject(targetProp) && !targetProp[isIcaro] ) {
+    if ( isObject(targetProp) && !targetProp[isIkarhu] ) {
       if ( !snitches.has(targetProp) ) {
         snitches.set( targetProp, makeSnitch(target, property, [], target, property) );
       }
@@ -170,12 +109,70 @@ const IKARHU_HANDLER = {
     }
   },
   deleteProperty(target, property) {
-    //console.log('delete', target, property);
+		//console.log('delete', target, property);
     delete target[property];
     target[dispatch](property, DELETED);
     return true;
   }
+};
+
+function patch(target, changes, deleteMissing){
+  if ( deleteMissing ) {
+    Object.keys(target).forEach( key => {
+      if ( changes[key] === undefined ) {
+        changes[key] = DELETED;
+      }
+    });
+    Object.keys(changes).forEach( key => {
+      changes[key] = changes[key] === null && target[key] !== null ? NULL : changes[key];
+    })
+  }
+
+  Object.keys( changes )
+		.sort( ( a,b ) => isNaN(a) || isNaN(b) ? (a < b ? -1 : 1) : a - b )
+		.reverse()
+		.forEach( key => {
+			// both arrays or objects, really
+  let bothAreObjects = isObject(target[key]) && isObject(changes[key]);
+
+  if ( changes[key] === DELETED ) {
+    Array.isArray(target) ? target.splice(key, 1) : delete target[key];
+  }
+  else if ( changes[key] === NULL ) {
+    target[key] = null;
+  }
+			// value is the same, do nothing
+  else if (target[key] === changes[key]) {
+    delete changes[key];
+  }
+  else if ( bothAreObjects ) {
+    patch(target[key], changes[key], deleteMissing);
+
+				// no change occurred
+    if ( Object.keys(changes[key]).length === 0 ) {
+      delete changes[key];
+    }
+    else if ( deleteMissing && Array.isArray(changes[key]) ) {
+      changes[key] = convertArrayToObject( changes[key] );
+    }
+  }
+  else if ( changes[key] !== null ) {
+				// update the value
+    target[key] = changes[key];
+  }
+});
 }
+
+function convertArrayToObject(array){
+  let changeObject = {};
+  Object.keys(array).forEach( key => {
+    if ( array[key] ) {
+      changeObject[key] = array[key]
+    }
+  });
+  return changeObject
+}
+
 
 /**
  * Define a private property
@@ -198,37 +195,32 @@ function define(obj, key, value) {
  * @returns {*} the object received enhanced with some extra properties
  */
 function enhance(obj) {
-  // add some "kinda hidden" properties
+	// add some "kinda hidden" properties
   Object.assign(obj, {
     [changes]: {},
-    [rollback]: {},
     [timer]: null,
-    [isIcaro]: true,
-    [dispatch](property, value, oldValue) {
+    [isIkarhu]: true,
+    [dispatch](property, value) {
       //console.log('dispatch', 'prop', property, 'value', value, 'stack', stack);
       if (listeners.has(obj)) {
         clearImmediate(obj[timer]);
         mergeDeep(obj[changes], {[property]: value});
-        if ( oldValue !== undefined ) {
-          mergeDeep(obj[rollback], {[property]: oldValue});
-        }
         obj[timer] = setImmediate(function () {
           listeners.get(obj).forEach(function (fn) {
-            fn(obj[changes], obj[rollback]);
+            fn(obj[changes]);
           });
           obj[changes] = {};
-          obj[rollback] = {};
         });
       }
     }
   });
 
-  // Add the API methods bound to the original object
+	// Add the API methods bound to the original object
   Object.keys(API).forEach(function (key) {
     define(obj, key, API[key].bind(obj));
   });
 
-  // used by toJSON
+	// used by toJSON
   if (Array.isArray(obj)) {
     obj[isArray] = true;
   }
@@ -263,7 +255,7 @@ function makeSnitch(target, property, parents, orgTarget, orgProp){
     set(child, prop, value){
       //no need to dispatch when nothing has changed
       if ( child[prop] !== value ) {
-        let changes = {[prop] : value};
+        let changes = {[prop] : value === null ? NULL : value};
         parents.forEach(function(parent){
           changes = {[parent]: changes};
         });
